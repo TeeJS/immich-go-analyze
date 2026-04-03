@@ -223,7 +223,7 @@ func runNormal() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		
+
 		var assetIDs []string
 		for rows.Next() {
 			var id string
@@ -263,7 +263,8 @@ func runNormal() {
 			imgBytes, err := downloadThumbnail(assetID)
 			if err != nil {
 				if strings.Contains(err.Error(), "status 404") {
-					fmt.Printf("\n   [SKIP] Thumbnail not ready\n")
+					fileName, filePath := getAssetMetadata(assetID)
+					fmt.Printf("\n   [SKIP] Thumbnail not ready | file=%s | path=%s\n", fileName, filePath)
 				} else {
 					fmt.Printf("\n   [SKIP] Download error: %v\n", err)
 				}
@@ -305,6 +306,47 @@ func runNormal() {
 			time.Sleep(2 * time.Minute)
 		}
 	}
+}
+
+var assetMetadataCache = make(map[string][2]string)
+
+func getAssetMetadata(id string) (string, string) {
+	if cached, ok := assetMetadataCache[id]; ok {
+		return cached[0], cached[1]
+	}
+
+	u := fmt.Sprintf("%s/api/assets/%s", ImmichBaseURL, id)
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		assetMetadataCache[id] = [2]string{"UNKNOWN", "UNKNOWN"}
+		return "UNKNOWN", "UNKNOWN"
+	}
+	req.Header.Set("x-api-key", ImmichAPIKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		assetMetadataCache[id] = [2]string{"UNKNOWN", "UNKNOWN"}
+		return "UNKNOWN", "UNKNOWN"
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		assetMetadataCache[id] = [2]string{"UNKNOWN", "UNKNOWN"}
+		return "UNKNOWN", "UNKNOWN"
+	}
+
+	var result struct {
+		OriginalFileName string `json:"originalFileName"`
+		OriginalPath     string `json:"originalPath"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		assetMetadataCache[id] = [2]string{"UNKNOWN", "UNKNOWN"}
+		return "UNKNOWN", "UNKNOWN"
+	}
+
+	assetMetadataCache[id] = [2]string{result.OriginalFileName, result.OriginalPath}
+	return result.OriginalFileName, result.OriginalPath
 }
 
 func downloadThumbnail(id string) ([]byte, error) {
