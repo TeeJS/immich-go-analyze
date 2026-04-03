@@ -74,6 +74,7 @@ func main() {
 	envDBName := getEnv("DB_NAME", "immich")
 	envDBPort := getEnv("DB_PORT", "5432")
 	envDBHost := getEnv("DB_HOST", envImmichHost)
+	envImmichPort := getEnv("IMMICH_PORT", "2283")
 	envWatchInterval := getEnv("WATCH_INTERVAL", "1m")
 
 	// 3. Define Flags (override ENV)
@@ -97,7 +98,7 @@ func main() {
 	}
 
 	// 4. Construct Derived URLs
-	ImmichBaseURL = fmt.Sprintf("http://%s:2283", ImmichHostIP)
+	ImmichBaseURL = fmt.Sprintf("http://%s:%s", ImmichHostIP, envImmichPort)
 	// Use envDBHost for Postgres, but if user overrides -host flag, should we respect that for DB too if DB_HOST wasn't explicitly set?
 	// Simplest logic: If DB_HOST is set in env, use it. If not, use the final ImmichHostIP (which might be from flag).
 	
