@@ -301,8 +301,8 @@ func runNormal() {
 
 		// If we found images but processed none (e.g. all 404), sleep to avoid hammering
 		if len(assetIDs) > 0 && batchSuccess == 0 {
-			fmt.Println("Batch failed (waiting for thumbnails). Sleeping 30s...")
-			time.Sleep(30 * time.Second)
+			fmt.Println("Batch failed (waiting for thumbnails). Sleeping 2m...")
+			time.Sleep(2 * time.Minute)
 		}
 	}
 }
