@@ -52,6 +52,42 @@ See the tool in action:
     go build -o immich-go-analyze main.go
     ```
 
+### Option C: Docker
+Pull the pre-built image from GitHub Container Registry:
+```bash
+docker pull ghcr.io/teejs/immich-go-analyze:latest
+```
+
+Run with environment variables:
+```bash
+docker run -d --name immich-go-analyze \
+  -e IMMICH_HOST=192.168.1.100 \
+  -e IMMICH_API_KEY=your_key_here \
+  -e DB_HOST=192.168.1.100 \
+  -e DB_USER=postgres \
+  -e DB_PASS=postgres \
+  -e DB_NAME=immich \
+  -e OLLAMA_HOST=http://192.168.1.100:11434 \
+  -e WATCH_INTERVAL=1m \
+  --restart unless-stopped \
+  ghcr.io/teejs/immich-go-analyze:latest
+```
+
+The Docker image runs in **watch mode** by default. To run a one-time batch instead:
+```bash
+docker run --rm \
+  -e IMMICH_HOST=192.168.1.100 \
+  -e IMMICH_API_KEY=your_key_here \
+  -e DB_HOST=192.168.1.100 \
+  -e DB_USER=postgres \
+  -e DB_PASS=postgres \
+  -e DB_NAME=immich \
+  -e OLLAMA_HOST=http://192.168.1.100:11434 \
+  ghcr.io/teejs/immich-go-analyze:latest ""
+```
+
+> **Note:** Pass an empty string `""` as the argument to override the default `-watch` flag for one-time runs.
+
 ## Configuration
 
 ### Environment Variables
