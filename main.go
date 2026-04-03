@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -107,7 +108,7 @@ func main() {
 		finalDBHost = ImmichHostIP
 	}
 
-	PostgresURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s", envDBUser, envDBPass, finalDBHost, envDBPort, envDBName)
+	PostgresURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s", url.PathEscape(envDBUser), url.PathEscape(envDBPass), finalDBHost, envDBPort, envDBName)
 
 	if BenchmarkMode {
 		runBenchmark()
