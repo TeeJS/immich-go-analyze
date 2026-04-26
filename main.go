@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -211,12 +212,12 @@ func runNormal() {
 	for {
 		fmt.Println("2. Scanning for images (batch of 100)...")
 		query := `
-			SELECT a.id
+			SELECT a.id, a."originalPath"
 			FROM asset a
 			JOIN asset_exif ae ON a.id = ae."assetId"
 			WHERE (ae.description IS NULL OR ae.description = '')
 			AND a.type = 'IMAGE'
-			ORDER BY a."createdAt" DESC
+			ORDER BY COALESCE(ae."dateTimeOriginal", a."fileCreatedAt", a."createdAt") DESC
 			LIMIT 100
 		`
 		rows, err := conn.Query(ctx, query)
@@ -224,17 +225,21 @@ func runNormal() {
 			log.Fatal(err)
 		}
 
-		var assetIDs []string
+		type assetRow struct {
+			ID   string
+			Path string
+		}
+		var assets []assetRow
 		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
+			var a assetRow
+			if err := rows.Scan(&a.ID, &a.Path); err != nil {
 				log.Fatal(err)
 			}
-			assetIDs = append(assetIDs, id)
+			assets = append(assets, a)
 		}
 		rows.Close()
 
-		if len(assetIDs) == 0 {
+		if len(assets) == 0 {
 			if WatchMode {
 				if totalProcessed > 0 {
 					fmt.Printf("All caught up! Processed %d images.\n", totalProcessed)
@@ -255,10 +260,12 @@ func runNormal() {
 
 		count := 0
 		batchSuccess := 0
-		for _, assetID := range assetIDs {
+		for _, a := range assets {
+			assetID := a.ID
 			count++
 			totalProcessed++
-			fmt.Printf("[%d|Total:%d] Processing %s ", count, totalProcessed, assetID)
+			shortPath := filepath.Base(filepath.Dir(a.Path)) + "/" + filepath.Base(a.Path)
+			fmt.Printf("[%d|Total:%d] Processing %s %s ", count, totalProcessed, shortPath, assetID)
 
 			imgBytes, err := downloadThumbnail(assetID)
 			if err != nil {
@@ -301,7 +308,7 @@ func runNormal() {
 		}
 
 		// If we found images but processed none (e.g. all 404), sleep to avoid hammering
-		if len(assetIDs) > 0 && batchSuccess == 0 {
+		if len(assets) > 0 && batchSuccess == 0 {
 			fmt.Println("Batch failed (waiting for thumbnails). Sleeping 2m...")
 			time.Sleep(2 * time.Minute)
 		}
