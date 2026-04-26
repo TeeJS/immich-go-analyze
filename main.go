@@ -33,6 +33,7 @@ var BenchmarkMode bool
 var VerboseMode bool
 var WatchMode bool
 var WatchInterval time.Duration
+var CleanJunk string // "", "dry-run", or "true"
 
 // Derived URLs
 var ImmichBaseURL string
@@ -77,6 +78,7 @@ func main() {
 	envDBHost := getEnv("DB_HOST", envImmichHost)
 	envImmichPort := getEnv("IMMICH_PORT", "2283")
 	envWatchInterval := getEnv("WATCH_INTERVAL", "1m")
+	CleanJunk = strings.ToLower(strings.TrimSpace(getEnv("CLEAN_JUNK", "")))
 
 	// 3. Define Flags (override ENV)
 	flag.StringVar(&ImmichHostIP, "host", envImmichHost, "Immich Host IP")
@@ -206,6 +208,10 @@ func runNormal() {
 	}
 	defer conn.Close(ctx)
 
+	if CleanJunk == "dry-run" || CleanJunk == "true" {
+		runCleanJunk(ctx, conn, CleanJunk == "true")
+	}
+
 	ollamaHTTPClient := &http.Client{Timeout: 0}
 	totalProcessed := 0
 
@@ -216,7 +222,6 @@ func runNormal() {
 			FROM asset a
 			JOIN asset_exif ae ON a.id = ae."assetId"
 			WHERE (ae.description IS NULL OR ae.description = '')
-			AND a.type = 'IMAGE'
 			ORDER BY COALESCE(ae."dateTimeOriginal", a."fileCreatedAt", a."createdAt") DESC
 			LIMIT 100
 		`
@@ -313,6 +318,85 @@ func runNormal() {
 			time.Sleep(2 * time.Minute)
 		}
 	}
+}
+
+// runCleanJunk wipes asset_exif.description rows that look like imported JSON metadata
+// (e.g. Pixel motion-photo blobs) so the watcher can re-describe them with Ollama.
+// Match shape: starts with [ or { AND contains a distinctive JSON key from the known blobs.
+// If execute is false, only counts and logs a sample (dry-run).
+func runCleanJunk(ctx context.Context, conn *pgx.Conn, execute bool) {
+	mode := "dry-run"
+	if execute {
+		mode = "true"
+	}
+	fmt.Printf("[CLEAN_JUNK=%s] Scanning for junk JSON descriptions...\n", mode)
+
+	const matchClause = `
+		(description LIKE '[%' OR description LIKE '{%')
+		AND (
+			description LIKE '%"videoResolution"%'
+			OR description LIKE '%"videoDuration"%'
+			OR description LIKE '%"isRecord"%'
+			OR description LIKE '%"isCropped"%'
+		)
+	`
+
+	previewQuery := `
+		SELECT a."originalPath"
+		FROM asset_exif ae
+		JOIN asset a ON a.id = ae."assetId"
+		WHERE ` + matchClause + `
+		ORDER BY a."originalPath"
+		LIMIT 10
+	`
+	rows, err := conn.Query(ctx, previewQuery)
+	if err != nil {
+		fmt.Printf("[CLEAN_JUNK=%s] Preview query error: %v\n", mode, err)
+		return
+	}
+	var samples []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			fmt.Printf("[CLEAN_JUNK=%s] Scan error: %v\n", mode, err)
+			rows.Close()
+			return
+		}
+		samples = append(samples, p)
+	}
+	rows.Close()
+
+	var total int
+	countQuery := `SELECT COUNT(*) FROM asset_exif WHERE ` + matchClause
+	if err := conn.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+		fmt.Printf("[CLEAN_JUNK=%s] Count query error: %v\n", mode, err)
+		return
+	}
+
+	if total == 0 {
+		fmt.Printf("[CLEAN_JUNK=%s] No matching junk descriptions found. Nothing to do.\n", mode)
+		return
+	}
+
+	if !execute {
+		fmt.Printf("[CLEAN_JUNK=dry-run] Would wipe %d junk JSON descriptions. Sample (up to 10):\n", total)
+		for _, p := range samples {
+			fmt.Printf("  %s\n", p)
+		}
+		fmt.Println("[CLEAN_JUNK=dry-run] Done — no changes made. Set CLEAN_JUNK=true to execute. Proceeding to watch mode.")
+		return
+	}
+
+	tag, err := conn.Exec(ctx, `UPDATE asset_exif SET description = '' WHERE `+matchClause)
+	if err != nil {
+		fmt.Printf("[CLEAN_JUNK=true] UPDATE error: %v\n", err)
+		return
+	}
+	fmt.Printf("[CLEAN_JUNK=true] Wiped %d junk JSON descriptions. Sample (up to 10):\n", tag.RowsAffected())
+	for _, p := range samples {
+		fmt.Printf("  %s\n", p)
+	}
+	fmt.Println("[CLEAN_JUNK=true] Done. Cleared rows will be re-described by the watcher. Proceeding to watch mode.")
 }
 
 var assetMetadataCache = make(map[string][2]string)
