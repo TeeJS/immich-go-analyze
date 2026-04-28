@@ -223,6 +223,7 @@ func runNormal() {
 			JOIN asset_exif ae ON a.id = ae."assetId"
 			WHERE (ae.description IS NULL OR ae.description = '')
 			AND a."originalPath" NOT LIKE '%/encoded-video/%'
+				AND a."originalPath" NOT LIKE '%BURST%'
 			ORDER BY COALESCE(ae."dateTimeOriginal", a."fileCreatedAt", a."createdAt") DESC
 			LIMIT 100
 		`

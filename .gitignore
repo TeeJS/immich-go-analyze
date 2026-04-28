@@ -5,9 +5,6 @@
 main
 immich-analyze.exe
 
-# Local backups (created before edits)
-.backups/
-
 # Claude Code workspace settings (user-local)
 .claude/
 
