@@ -224,7 +224,6 @@ func runNormal() {
 			WHERE (ae.description IS NULL OR ae.description = '')
 			AND a."originalPath" NOT LIKE '%/encoded-video/%'
 				AND a."originalPath" NOT LIKE '%BURST%'
-				AND a."thumbhash" IS NOT NULL
 			ORDER BY COALESCE(ae."dateTimeOriginal", a."fileCreatedAt", a."createdAt") DESC
 			LIMIT 100
 		`
