@@ -40,6 +40,6 @@ jobs:
         with:
           context: .
           provenance: false
-          push: true
+          outputs: type=image,oci-mediatypes=false,push=true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
